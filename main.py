@@ -1,6 +1,6 @@
 import os, json, qrcode
-from telegram import *
-from telegram.ext import *
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
@@ -8,7 +8,7 @@ ADMIN_USERNAME = "yourusername"
 
 DATA_FILE = "data.json"
 
-# ===== LOAD DATA =====
+# ===== LOAD / SAVE =====
 def load_data():
     try:
         with open(DATA_FILE) as f:
@@ -49,7 +49,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "🔥 PRO BOT V2\n⏱ 0–24 Hours Delivery",
+        "🔥 PRO BOT (NO ERROR VERSION)\n⏱ 0–24 Hours Delivery",
         reply_markup=InlineKeyboardMarkup(kb)
     )
 
@@ -68,10 +68,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(f"💰 Balance: ₹{user['balance']}")
 
     elif q.data == "history":
-        text = "📜 Orders:\n"
-        for o in user["orders"][-5:]:
-            text += f"{o}\n"
-        await q.message.reply_text(text or "No orders")
+        if not user["orders"]:
+            await q.message.reply_text("No orders yet ❌")
+        else:
+            text = "📜 Last Orders:\n"
+            for o in user["orders"][-5:]:
+                text += f"{o}\n"
+            await q.message.reply_text(text)
 
     elif q.data == "order":
         kb = [
@@ -82,7 +85,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("30K - ₹900", callback_data="buy_900")],
             [InlineKeyboardButton("50K - ₹1000", callback_data="buy_1000")]
         ]
-        await q.message.reply_text("Choose plan:", reply_markup=InlineKeyboardMarkup(kb))
+        await q.message.reply_text("Choose package:", reply_markup=InlineKeyboardMarkup(kb))
 
     elif q.data.startswith("buy_"):
         amt = int(q.data.split("_")[1])
@@ -96,7 +99,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["step"] = "username"
 
     elif q.data == "promo":
-        await q.message.reply_text("Send code:")
+        await q.message.reply_text("Send promo code:")
         context.user_data["step"] = "promo"
 
     elif q.data == "contact":
@@ -108,23 +111,23 @@ async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(uid)
     txt = update.message.text
 
-    # WALLET
     if context.user_data.get("step") == "wallet":
-        amt = int(txt)
-        context.user_data["amt"] = amt
+        try:
+            amt = int(txt)
+            context.user_data["amt"] = amt
 
-        qr = generate_qr(amt)
-        await update.message.reply_photo(open(qr, "rb"), caption=f"Pay ₹{amt}")
-        context.user_data["step"] = "pay"
+            qr = generate_qr(amt)
+            await update.message.reply_photo(open(qr, "rb"), caption=f"Pay ₹{amt}")
+            context.user_data["step"] = "pay"
+        except:
+            await update.message.reply_text("Enter valid amount ❌")
 
-    # USERNAME ORDER
     elif context.user_data.get("step") == "username":
         username = txt
         amt = context.user_data["amount"]
 
         user["balance"] -= amt
-        order = f"{username} - ₹{amt}"
-        user["orders"].append(order)
+        user["orders"].append(f"{username} - ₹{amt}")
         save_data(data)
 
         await context.bot.send_message(
@@ -133,12 +136,11 @@ async def message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(
-            "✅ Order placed!\n⏱ 0–24 hours\n❗ Contact admin if issue"
+            "✅ Order placed!\n⏱ 0–24 hours delivery\n❗ Contact admin if issue"
         )
 
         context.user_data["step"] = None
 
-    # PROMO
     elif context.user_data.get("step") == "promo":
         if txt.upper() == "NEW10":
             user["balance"] += 10
@@ -201,8 +203,8 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message))
     app.add_handler(MessageHandler(filters.PHOTO, photo))
 
-    print("🔥 Bot Running V2...")
-    app.run_polling()
+    print("🔥 Bot Running Successfully...")
+    app.run_polling(close_loop=False)
 
 if __name__ == "__main__":
     main()
